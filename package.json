@@ -31,7 +31,7 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/PamanAleph/create-astro.git"
+        "url": "git+https://github.com/PamanAleph/create-astro.git"
     },
     "bugs": {
         "url": "https://github.com/PamanAleph/create-astro/issues"
@@ -59,6 +59,9 @@
     },
     "engines": {
         "node": ">=18.0.0"
+    },
+    "publishConfig": {
+        "access": "public"
     },
     "lint-staged": {
         "*.{js,ts,mjs}": [
