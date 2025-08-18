@@ -15,10 +15,12 @@ const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_ARCHIVE_BASE = 'https://github.com';
 
 type Framework = 'react' | 'vue';
+type PackageManager = 'npm' | 'yarn' | 'pnpm';
 
 interface TemplateOptions {
   projectName?: string;
   framework?: Framework;
+  packageManager?: PackageManager;
   ref?: string;
   noInstall?: boolean;
   useNpm?: boolean;
@@ -470,6 +472,17 @@ function resolveInputs(projectName: string | undefined, cliOptions: any): Templa
   }
   // If not set via flags or env, will be prompted
   
+  // Handle package manager option
+  if (cliOptions.packageManager) {
+    options.packageManager = cliOptions.packageManager as PackageManager;
+  } else if (process.env.CREATE_ASTRO_PACKAGE_MANAGER) {
+    const envPackageManager = process.env.CREATE_ASTRO_PACKAGE_MANAGER.toLowerCase();
+    if (envPackageManager === 'npm' || envPackageManager === 'yarn' || envPackageManager === 'pnpm') {
+      options.packageManager = envPackageManager;
+    }
+  }
+  // If not set via flags or env, will be prompted
+  
   // Handle API routes option
   if (cliOptions.api !== undefined) {
     options.useApi = cliOptions.api;
@@ -621,6 +634,26 @@ async function createProject(options: TemplateOptions): Promise<void> {
   } else if (framework === undefined) {
     framework = 'react'; // Default for non-interactive
   }
+
+  // 2.5. Prompt for package manager if not set via flags/env
+  let { packageManager } = options;
+  if (packageManager === undefined && isTTY) {
+    const packageManagerResponse = await prompts({
+      type: 'select',
+      name: 'packageManager',
+      message: 'Choose a package manager:',
+      choices: [
+        { title: 'pnpm (recommended)', value: 'pnpm' },
+        { title: 'npm', value: 'npm' },
+        { title: 'yarn', value: 'yarn' }
+      ],
+      initial: 0 // Default: pnpm
+    });
+    
+    packageManager = packageManagerResponse.packageManager ?? 'pnpm'; // Default to pnpm if cancelled
+  } else if (packageManager === undefined) {
+     packageManager = detectPackageManager() as PackageManager; // Auto-detect for non-interactive
+   }
   
   const projectDir = path.resolve(kebabProjectName);
   
@@ -685,14 +718,12 @@ async function createProject(options: TemplateOptions): Promise<void> {
     // 7. Install dependencies
     let dependenciesInstalled = false;
     if (!noInstall) {
-      const packageManager = detectPackageManager();
-      await installDependencies(projectDir, packageManager);
+      await installDependencies(projectDir, packageManager!);
       dependenciesInstalled = true;
     }
     
     // 8. Display success summary
-    const packageManager = detectPackageManager();
-    displaySummary(projectDir, kebabProjectName, framework!, templateRef, packageManager, dependenciesInstalled, useApi ?? true, cleanupResult);
+    displaySummary(projectDir, kebabProjectName, framework!, templateRef, packageManager!, dependenciesInstalled, useApi ?? true, cleanupResult);
     
   } catch (error) {
     console.error(chalk.red('Error creating project:'), error instanceof Error ? error.message : 'Unknown error');
@@ -716,7 +747,8 @@ program
   .description('Create a new Astro project with React or Vue and TypeScript')
   .version('0.1.0')
   .argument('[project-name]', 'Name of the project')
-  .option('--framework <framework>', 'Framework to use (react|vue)', 'react')
+  .option('--framework <framework>', 'Framework to use (react|vue)')
+  .option('--package-manager <manager>', 'Package manager to use (npm|yarn|pnpm)')
   .option('--ref <ref>', 'Git reference (tag, branch, or commit) to use')
   .option('--no-install', 'Skip dependency installation')
   .option('--api', 'Include API routes')
