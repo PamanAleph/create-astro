@@ -1,72 +1,72 @@
 {
-    "name":  "@pamanaleph/create-astro",
-    "version":  "0.1.0",
-    "description":  "Create a new Astro project with React and TypeScript template",
-    "type":  "module",
-    "main":  "dist/index.js",
-    "bin":  {
-                "create-astro":  "dist/index.js"
-            },
-    "files":  [
-                  "dist"
-              ],
-    "scripts":  {
-                    "build":  "tsc",
-                    "dev":  "tsc --watch",
-                    "prepublishOnly":  "npm run build",
-                    "bom:check":  "node -e \"const fs = require('fs'); const files = ['package.json', 'tsconfig.json', '.releaserc.json', 'src/index.ts']; files.forEach(f => { if (fs.existsSync(f)) { const buf = fs.readFileSync(f); if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) { console.error(`BOM detected in ${f}`); process.exit(1); } } });\"",
-                    "test":  "npm run bom:check",
-                    "prepare":  "husky install"
-                },
-    "keywords":  [
-                     "astro",
-                     "react",
-                     "typescript",
-                     "template",
-                     "cli",
-                     "create",
-                     "scaffold"
-                 ],
-    "author":  "PamanAleph",
-    "license":  "MIT",
-    "repository":  {
-                       "type":  "git",
-                       "url":  "https://github.com/PamanAleph/create-astro.git"
-                   },
-    "bugs":  {
-                 "url":  "https://github.com/PamanAleph/create-astro/issues"
-             },
-    "homepage":  "https://github.com/PamanAleph/create-astro#readme",
-    "dependencies":  {
-                         "commander":  "^11.0.0",
-                         "chalk":  "^5.3.0",
-                         "ora":  "^7.0.1",
-                         "prompts":  "^2.4.2",
-                         "tar":  "^6.2.0",
-                         "node-fetch":  "^3.3.2"
-                     },
-    "devDependencies":  {
-                            "typescript":  "^5.2.2",
-                            "@types/node":  "^20.8.0",
-                            "@types/prompts":  "^2.4.4",
-                            "@types/tar":  "^6.1.5",
-                            "@semantic-release/changelog":  "^6.0.3",
-                            "@semantic-release/git":  "^10.0.1",
-                            "@semantic-release/github":  "^9.2.1",
-                            "semantic-release":  "^22.0.5",
-                            "husky":  "^8.0.3",
-                            "lint-staged":  "^15.0.2"
-                        },
-    "engines":  {
-                    "node":  "\u003e=18.0.0"
-                },
-    "lint-staged":  {
-                        "*.{js,ts,mjs}":  [
-                                              "eslint --fix",
-                                              "prettier --write"
-                                          ],
-                        "*.{json,md}":  [
-                                            "prettier --write"
-                                        ]
-                    }
+    "name": "@pamanaleph/create-astro",
+    "version": "1.0.0",
+    "description": "Create a new Astro project with React and TypeScript template",
+    "type": "module",
+    "main": "dist/index.js",
+    "bin": {
+        "create-astro": "dist/index.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "prepublishOnly": "npm run build",
+        "bom:check": "node -e \"const fs = require('fs'); const files = ['package.json', 'tsconfig.json', '.releaserc.json', 'src/index.ts']; files.forEach(f => { if (fs.existsSync(f)) { const buf = fs.readFileSync(f); if (buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF) { console.error(`BOM detected in ${f}`); process.exit(1); } } });\"",
+        "test": "npm run bom:check",
+        "prepare": "husky install"
+    },
+    "keywords": [
+        "astro",
+        "react",
+        "typescript",
+        "template",
+        "cli",
+        "create",
+        "scaffold"
+    ],
+    "author": "PamanAleph",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/PamanAleph/create-astro.git"
+    },
+    "bugs": {
+        "url": "https://github.com/PamanAleph/create-astro/issues"
+    },
+    "homepage": "https://github.com/PamanAleph/create-astro#readme",
+    "dependencies": {
+        "commander": "^11.0.0",
+        "chalk": "^5.3.0",
+        "ora": "^7.0.1",
+        "prompts": "^2.4.2",
+        "tar": "^6.2.0",
+        "node-fetch": "^3.3.2"
+    },
+    "devDependencies": {
+        "typescript": "^5.2.2",
+        "@types/node": "^20.8.0",
+        "@types/prompts": "^2.4.4",
+        "@types/tar": "^6.1.5",
+        "@semantic-release/changelog": "^6.0.3",
+        "@semantic-release/git": "^10.0.1",
+        "@semantic-release/github": "^9.2.1",
+        "semantic-release": "^22.0.5",
+        "husky": "^8.0.3",
+        "lint-staged": "^15.0.2"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "lint-staged": {
+        "*.{js,ts,mjs}": [
+            "eslint --fix",
+            "prettier --write"
+        ],
+        "*.{json,md}": [
+            "prettier --write"
+        ]
+    }
 }
