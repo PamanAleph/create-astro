@@ -1,4 +1,4 @@
-﻿# @pamanaleph/create-astro
+# @pamanaleph/create-astro
 
 Create a new Astro project with React and TypeScript using our optimized template.
 
