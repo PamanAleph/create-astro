@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+powershell -ExecutionPolicy Bypass -File "$(dirname "$0")/pre-commit.ps1"

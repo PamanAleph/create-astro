@@ -1,0 +1,127 @@
+name: E2E Scaffold Test
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  e2e-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build CLI
+      run: npm run build
+      
+    - name: Test CLI scaffolding (with install)
+      shell: bash
+      run: |
+        # Create test directory
+        mkdir -p test-projects
+        cd test-projects
+        
+        # Test scaffolding with default settings
+        node ../dist/index.js my-test-app --no-install
+        
+        # Verify project structure
+        if [ ! -d "my-test-app" ]; then
+          echo "❌ Project directory not created"
+          exit 1
+        fi
+        
+        cd my-test-app
+        
+        # Check essential files exist
+        essential_files=("package.json" "tsconfig.json" "astro.config.mjs")
+        for file in "${essential_files[@]}"; do
+          if [ ! -f "$file" ]; then
+            echo "❌ Essential file missing: $file"
+            exit 1
+          fi
+        done
+        
+        # Check for BOM in package.json (most critical file)
+        if command -v xxd >/dev/null 2>&1; then
+          if head -c 3 package.json | xxd -p | grep -q "efbbbf"; then
+            echo "❌ BOM detected in package.json"
+            exit 1
+          else
+            echo "✅ No BOM detected in package.json"
+          fi
+        elif command -v od >/dev/null 2>&1; then
+          # Fallback for systems without xxd
+          if od -t x1 -N 3 package.json | head -1 | grep -q "ef bb bf"; then
+            echo "❌ BOM detected in package.json"
+            exit 1
+          else
+            echo "✅ No BOM detected in package.json"
+          fi
+        fi
+        
+        # Verify package.json has correct project name
+        if ! grep -q '"name": "my-test-app"' package.json; then
+          echo "❌ Package name not updated correctly"
+          exit 1
+        fi
+        
+        echo "✅ Basic scaffolding test passed"
+        
+    - name: Test with custom ref (Ubuntu only)
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        cd test-projects
+        
+        # Test with specific ref (using master as fallback)
+        node ../dist/index.js my-test-app-ref --ref master --no-install
+        
+        if [ ! -d "my-test-app-ref" ]; then
+          echo "❌ Project with custom ref not created"
+          exit 1
+        fi
+        
+        echo "✅ Custom ref test passed"
+        
+    - name: Test installation and build (Ubuntu only)
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        cd test-projects
+        
+        # Create project with installation
+        node ../dist/index.js my-test-app-build
+        
+        cd my-test-app-build
+        
+        # Try to build the project
+        npm run build
+        
+        # Check if build succeeded
+        if [ ! -d "dist" ]; then
+          echo "❌ Build failed - dist directory not created"
+          exit 1
+        fi
+        
+        echo "✅ Build test passed"
+        
+    - name: Cleanup
+      shell: bash
+      run: |
+        rm -rf test-projects

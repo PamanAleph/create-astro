@@ -67,7 +67,8 @@ async function updatePackageJson(projectDir, projectName) {
         // Update project name
         packageJson.name = projectName;
         // Write back to file
-        await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+        const jsonString = JSON.stringify(packageJson, null, 2) + "\n";
+        await fs.writeFile(packageJsonPath, jsonString, { encoding: "utf8" });
         spinner.succeed('Package.json updated');
     }
     catch (error) {

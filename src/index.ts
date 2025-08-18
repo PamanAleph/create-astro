@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 import { Command } from 'commander';
 import chalk from 'chalk';
@@ -24,6 +24,53 @@ interface GitHubRelease {
   tag_name: string;
   name: string;
   published_at: string;
+}
+
+async function sanitizeBOM(projectDir: string): Promise<void> {
+  const spinner = ora('Sanitizing files (removing BOM)...').start();
+  
+  try {
+    const filesToSanitize = [
+      'package.json',
+      'tsconfig.json',
+      '.releaserc.json',
+      'astro.config.mjs'
+    ];
+    
+    let sanitizedCount = 0;
+    
+    for (const fileName of filesToSanitize) {
+      const filePath = path.join(projectDir, fileName);
+      
+      try {
+        // Check if file exists
+        await fs.access(filePath);
+        
+        // Read file as buffer to check for BOM
+        const buffer = await fs.readFile(filePath);
+        
+        // Check if file starts with BOM (EF BB BF)
+        if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+          // Remove BOM and write back
+          const content = buffer.slice(3).toString('utf8');
+          await fs.writeFile(filePath, content, { encoding: 'utf8' });
+          sanitizedCount++;
+        }
+      } catch (error) {
+        // File doesn't exist or can't be read, skip silently
+        continue;
+      }
+    }
+    
+    if (sanitizedCount > 0) {
+      spinner.succeed(`Sanitized ${sanitizedCount} file(s) (removed BOM)`);
+    } else {
+      spinner.succeed('No BOM found in files');
+    }
+  } catch (error) {
+    spinner.fail('Failed to sanitize files');
+    throw error;
+  }
 }
 
 async function getLatestTag(): Promise<string> {
@@ -79,6 +126,9 @@ async function downloadTemplate(ref: string, targetDir: string): Promise<void> {
     });
     
     spinner.succeed(`Template downloaded to ${chalk.green(targetDir)}`);
+    
+    // Sanitize BOM from downloaded files
+    await sanitizeBOM(targetDir);
   } catch (error) {
     spinner.fail('Failed to download template');
     throw error;
@@ -97,7 +147,7 @@ async function updatePackageJson(projectDir: string, projectName: string): Promi
     packageJson.name = projectName;
     
     // Write back to file
-    await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+    const jsonString = JSON.stringify(packageJson, null, 2) + "\n"; await fs.writeFile(packageJsonPath, jsonString, { encoding: "utf8" });
     
     spinner.succeed('Package.json updated');
   } catch (error) {
@@ -274,3 +324,4 @@ program
   });
 
 program.parse();
+
