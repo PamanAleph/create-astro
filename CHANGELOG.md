@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/PamanAleph/create-astro/compare/v1.1.0...v1.2.0) (2025-08-18)
+
+
+### Features
+
+* **cli:** enhance create-astro with interactive options and cleanup ([d5b4feb](https://github.com/PamanAleph/create-astro/commit/d5b4feb52017d3650c75b332e81ded81761ab4f7))
+
 # [1.1.0](https://github.com/PamanAleph/create-astro/compare/v1.0.0...v1.1.0) (2025-08-18)
 
 
