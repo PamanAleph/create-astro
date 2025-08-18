@@ -1,7 +1,7 @@
 {
     "name": "@pamanaleph/create-astro",
     "version": "1.2.0",
-    "description": "🚀 Create a new Astro project with React and TypeScript template. Interactive CLI with customizable options for API routes, cleanup, and more.",
+    "description": "🚀 Create a new Astro project with React or Vue and TypeScript template. Interactive CLI with customizable options for framework selection, API routes, cleanup, and more.",
     "type": "module",
     "main": "dist/index.js",
     "bin": {
@@ -52,6 +52,7 @@
             "project-name": "Name of the project directory (optional, will prompt if not provided)"
         },
         "options": {
+            "--framework <framework>": "Choose framework: react or vue (default: react)",
             "--api": "Include API routes in the project",
             "--no-api": "Exclude API routes from the project",
             "--yes, -y": "Skip all prompts and use default values",
@@ -62,6 +63,7 @@
             "--version, -V": "Display version number"
         },
         "environment_variables": {
+            "CREATE_ASTRO_FRAMEWORK": "Set to 'react' or 'vue' to choose framework (overrides prompts)",
             "CREATE_ASTRO_API": "Set to '1' to include API routes, '0' to exclude (overrides prompts)",
             "CREATE_ASTRO_YES": "Set to '1' to skip all prompts and use defaults"
         },
@@ -87,7 +89,11 @@
                 "description": "Create project from develop branch"
             },
             {
-                "command": "CREATE_ASTRO_API=1 CREATE_ASTRO_YES=1 npx @pamanaleph/create-astro my-app",
+                "command": "npx @pamanaleph/create-astro my-app --framework vue --api",
+                "description": "Create Vue project with API routes"
+            },
+            {
+                "command": "CREATE_ASTRO_FRAMEWORK=vue CREATE_ASTRO_API=1 npx @pamanaleph/create-astro my-app",
                 "description": "Create project using environment variables"
             }
         ]
@@ -102,27 +108,30 @@
         "🔒 NPM-safe project name validation",
         "🎨 Beautiful CLI output with progress indicators",
         "⚙️ Environment variable support",
-        "🚀 Zero-config setup for Astro + React + TypeScript"
+        "🚀 Zero-config setup for Astro + React/Vue + TypeScript",
+        "🎨 Multi-framework support (React & Vue)"
     ],
     "dependencies": {
-        "commander": "^11.0.0",
+        "@types/glob": "^8.1.0",
         "chalk": "^5.3.0",
+        "commander": "^11.0.0",
+        "glob": "^10.4.5",
+        "node-fetch": "^3.3.2",
         "ora": "^7.0.1",
         "prompts": "^2.4.2",
-        "tar": "^6.2.0",
-        "node-fetch": "^3.3.2"
+        "tar": "^6.2.0"
     },
     "devDependencies": {
-        "typescript": "^5.2.2",
-        "@types/node": "^20.8.0",
-        "@types/prompts": "^2.4.4",
-        "@types/tar": "^6.1.5",
         "@semantic-release/changelog": "^6.0.3",
         "@semantic-release/git": "^10.0.1",
         "@semantic-release/github": "^9.2.1",
-        "semantic-release": "^22.0.5",
+        "@types/node": "^20.8.0",
+        "@types/prompts": "^2.4.4",
+        "@types/tar": "^6.1.5",
         "husky": "^8.0.3",
-        "lint-staged": "^15.0.2"
+        "lint-staged": "^15.0.2",
+        "semantic-release": "^22.0.5",
+        "typescript": "^5.2.2"
     },
     "engines": {
         "node": ">=18.0.0"

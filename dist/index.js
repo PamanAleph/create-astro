@@ -8,8 +8,7 @@ import tar from 'tar';
 import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
-const TEMPLATE_REPO = 'PamanAleph/astro-react-typescript-template';
-const TEMPLATE_NPM_PACKAGE = 'astro-react-typescript';
+const TEMPLATE_REPO = 'PamanAleph/astro-multi-framework-template';
 const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_ARCHIVE_BASE = 'https://github.com';
 async function cleanupDevFiles(projectDir, options) {
@@ -20,113 +19,73 @@ async function cleanupDevFiles(projectDir, options) {
             '.gitignore',
             'README.md',
             '.env.example',
-            'eslint.config.js',
-            'eslint.config.mjs',
-            'eslint.config.ts',
-            'astro.config.mjs',
-            'astro.config.js',
-            'astro.config.ts',
+            'eslint.config.*',
+            'astro.config.*',
             'tsconfig.json',
             'package.json',
-            'package-lock.json',
-            'yarn.lock',
-            'pnpm-lock.yaml',
-            'public',
-            'src'
+            'public/**',
+            'src/**'
         ];
-        // Denylist - files/folders to delete
-        const denylist = [
-            // CI & Release
-            '.github',
-            '.husky',
-            '.releaserc.json',
-            '.releaserc.js',
-            '.releaserc.yml',
-            '.releaserc.yaml',
+        // Try to read .templateignore from template repo
+        let templateIgnorePatterns = [];
+        try {
+            const templateIgnoreUrl = `https://raw.githubusercontent.com/${TEMPLATE_REPO}/main/.templateignore`;
+            const response = await fetch(templateIgnoreUrl);
+            if (response.ok) {
+                const content = await response.text();
+                templateIgnorePatterns = content
+                    .split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith('#'));
+            }
+        }
+        catch {
+            // Fallback to internal denylist if .templateignore is not accessible
+        }
+        // Fallback denylist if .templateignore is not available
+        const fallbackDenylist = [
+            '.github/**',
+            '.husky/**',
+            '.releaserc.*',
             'CHANGELOG.md',
             'CONTRIBUTING.md',
-            // Editor/Tooling Dev
             '.editorconfig',
             '.gitattributes',
-            '.prettierrc',
-            '.prettierrc.json',
-            '.prettierrc.js',
-            '.prettierrc.yml',
-            '.prettierrc.yaml',
+            '.prettierrc*',
             '.prettierignore',
-            '.vscode',
+            '.vscode/**',
+            '.idea/**',
             '.npmignore',
-            // Documentation
-            'docs',
-            // Testing
-            'vitest.config.js',
-            'vitest.config.ts',
-            'vitest.config.mjs',
-            'jest.config.js',
-            'jest.config.ts',
-            'jest.config.json',
-            '__tests__',
-            'msw'
+            'docs/**',
+            'vitest.config.*',
+            'jest.config.*',
+            '__tests__/**',
+            '*.test.*',
+            '*.spec.*',
+            'test/**',
+            'msw/**'
         ];
+        const patternsToCheck = templateIgnorePatterns.length > 0 ? templateIgnorePatterns : fallbackDenylist;
         let filesRemoved = 0;
         let foldersRemoved = 0;
         const removedItems = [];
-        // Get all items in project directory
-        const items = await fs.readdir(projectDir);
-        for (const item of items) {
-            const itemPath = path.join(projectDir, item);
-            const stat = await fs.lstat(itemPath);
-            // Handle API routes special case first
-            if (item === 'src') {
-                if (!options.keepApi) {
-                    // Remove src/pages/api if keepApi is false
-                    const apiPath = path.join(itemPath, 'pages', 'api');
-                    try {
-                        await fs.access(apiPath);
-                        await fs.rm(apiPath, { recursive: true, force: true });
-                        removedItems.push('src/pages/api/**');
-                        foldersRemoved++;
-                    }
-                    catch {
-                        // API folder doesn't exist, skip
-                    }
-                }
-                continue;
+        // Handle API routes special case first
+        if (!options.keepApi) {
+            const apiPath = path.join(projectDir, 'src', 'pages', 'api');
+            try {
+                await fs.access(apiPath);
+                await fs.rm(apiPath, { recursive: true, force: true });
+                removedItems.push('src/pages/api/**');
+                foldersRemoved++;
             }
-            // Skip if in whitelist
-            if (whitelist.includes(item)) {
-                continue;
-            }
-            // Check if item should be removed
-            if (denylist.includes(item)) {
-                try {
-                    await fs.rm(itemPath, { recursive: true, force: true });
-                    removedItems.push(item);
-                    if (stat.isDirectory()) {
-                        foldersRemoved++;
-                    }
-                    else {
-                        filesRemoved++;
-                    }
-                }
-                catch (error) {
-                    // Ignore errors for files that don't exist or can't be deleted
-                    continue;
-                }
-            }
-            // Handle test files pattern matching
-            if (item.includes('.test.') || item.includes('.spec.') || item.endsWith('.test.js') ||
-                item.endsWith('.test.ts') || item.endsWith('.spec.js') || item.endsWith('.spec.ts')) {
-                try {
-                    await fs.rm(itemPath, { recursive: true, force: true });
-                    removedItems.push(item);
-                    filesRemoved++;
-                }
-                catch {
-                    continue;
-                }
+            catch {
+                // API folder doesn't exist, skip
             }
         }
+        // Process cleanup patterns
+        const cleanupResult = await processCleanupPatterns(projectDir, patternsToCheck, whitelist, removedItems);
+        filesRemoved += cleanupResult.filesRemoved;
+        foldersRemoved += cleanupResult.foldersRemoved;
         const result = {
             filesRemoved,
             foldersRemoved,
@@ -144,6 +103,55 @@ async function cleanupDevFiles(projectDir, options) {
         spinner.fail('Failed to cleanup development files');
         throw error;
     }
+}
+async function processCleanupPatterns(projectDir, patterns, whitelist, removedItems) {
+    const { glob } = await import('glob');
+    let filesRemoved = 0;
+    let foldersRemoved = 0;
+    for (const pattern of patterns) {
+        try {
+            // Check if pattern matches any whitelist item
+            const isWhitelisted = whitelist.some(whitelistItem => {
+                if (whitelistItem.includes('*')) {
+                    // Handle glob patterns in whitelist
+                    return pattern.includes(whitelistItem.replace('/**', '').replace('/*', ''));
+                }
+                return pattern === whitelistItem || pattern.startsWith(whitelistItem + '/');
+            });
+            if (isWhitelisted) {
+                continue;
+            }
+            // Use glob to find matching files/folders
+            const matches = await glob(pattern, {
+                cwd: projectDir,
+                dot: true,
+                absolute: false
+            });
+            for (const match of matches) {
+                const itemPath = path.join(projectDir, match);
+                try {
+                    const stat = await fs.lstat(itemPath);
+                    await fs.rm(itemPath, { recursive: true, force: true });
+                    removedItems.push(match);
+                    if (stat.isDirectory()) {
+                        foldersRemoved++;
+                    }
+                    else {
+                        filesRemoved++;
+                    }
+                }
+                catch {
+                    // Ignore errors for files that don't exist or can't be deleted
+                    continue;
+                }
+            }
+        }
+        catch {
+            // Ignore glob errors
+            continue;
+        }
+    }
+    return { filesRemoved, foldersRemoved };
 }
 async function sanitizeBOM(projectDir) {
     const spinner = ora('Sanitizing files (removing BOM)...').start();
@@ -204,9 +212,12 @@ async function getLatestTag() {
         return 'v0.1.0';
     }
 }
-async function downloadTemplate(ref, targetDir) {
-    const spinner = ora(`Downloading template from ${chalk.cyan(ref)}...`).start();
+async function downloadTemplate(ref, targetDir, framework) {
+    const spinner = ora(`Downloading ${framework} template from ${chalk.cyan(ref)}...`).start();
     try {
+        // Create target directory
+        await fs.mkdir(targetDir, { recursive: true });
+        // Download full repository
         const archiveUrl = `${GITHUB_ARCHIVE_BASE}/${TEMPLATE_REPO}/archive/${ref}.tar.gz`;
         const response = await fetch(archiveUrl);
         if (!response.ok) {
@@ -215,25 +226,57 @@ async function downloadTemplate(ref, targetDir) {
         if (!response.body) {
             throw new Error('No response body received');
         }
-        // Create target directory
-        await fs.mkdir(targetDir, { recursive: true });
-        // Extract tar.gz directly to target directory
-        await new Promise((resolve, reject) => {
-            const extractStream = tar.extract({
-                cwd: targetDir,
-                strip: 1, // Remove the top-level directory from the archive
+        // Create temporary directory for extraction
+        const tempDir = path.join(targetDir, '..', `temp-${Date.now()}`);
+        await fs.mkdir(tempDir, { recursive: true });
+        try {
+            // Extract tar.gz to temporary directory
+            await new Promise((resolve, reject) => {
+                const extractStream = tar.extract({
+                    cwd: tempDir,
+                    strip: 1, // Remove the top-level directory from the archive
+                });
+                response.body.pipe(extractStream);
+                extractStream.on('end', resolve);
+                extractStream.on('error', reject);
             });
-            response.body.pipe(extractStream);
-            extractStream.on('end', resolve);
-            extractStream.on('error', reject);
-        });
-        spinner.succeed(`Template downloaded to ${chalk.green(targetDir)}`);
+            // Copy framework-specific template to target directory
+            const frameworkTemplateDir = path.join(tempDir, 'templates', framework);
+            // Check if framework template exists
+            try {
+                await fs.access(frameworkTemplateDir);
+            }
+            catch {
+                throw new Error(`Framework template '${framework}' not found in repository`);
+            }
+            // Copy all files from framework template to target directory
+            await copyDirectory(frameworkTemplateDir, targetDir);
+        }
+        finally {
+            // Clean up temporary directory
+            await fs.rm(tempDir, { recursive: true, force: true });
+        }
+        spinner.succeed(`${framework} template downloaded to ${chalk.green(targetDir)}`);
         // Sanitize BOM from downloaded files
         await sanitizeBOM(targetDir);
     }
     catch (error) {
         spinner.fail('Failed to download template');
         throw error;
+    }
+}
+async function copyDirectory(src, dest) {
+    const entries = await fs.readdir(src, { withFileTypes: true });
+    for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            await fs.mkdir(destPath, { recursive: true });
+            await copyDirectory(srcPath, destPath);
+        }
+        else {
+            await fs.copyFile(srcPath, destPath);
+        }
     }
 }
 async function updatePackageJson(projectDir, projectName) {
@@ -332,6 +375,17 @@ function resolveInputs(projectName, cliOptions) {
         noCleanup: !cliOptions.cleanup, // Commander converts --no-cleanup to cleanup: false
         yes: cliOptions.yes || cliOptions.Y || false // Handle both --yes and -y
     };
+    // Handle framework option
+    if (cliOptions.framework) {
+        options.framework = cliOptions.framework;
+    }
+    else if (process.env.CREATE_ASTRO_FRAMEWORK) {
+        const envFramework = process.env.CREATE_ASTRO_FRAMEWORK.toLowerCase();
+        if (envFramework === 'react' || envFramework === 'vue') {
+            options.framework = envFramework;
+        }
+    }
+    // If not set via flags or env, will be prompted
     // Handle API routes option
     if (cliOptions.api !== undefined) {
         options.useApi = cliOptions.api;
@@ -346,8 +400,13 @@ function resolveInputs(projectName, cliOptions) {
     }
     return options;
 }
-function displaySummary(projectDir, projectName, packageManager, installed, apiEnabled, cleanupResult) {
+function displaySummary(projectDir, projectName, framework, templateRef, packageManager, installed, apiEnabled, cleanupResult) {
     console.log('\n' + chalk.green('✨ Project scaffolded successfully!'));
+    // Show template info
+    console.log('\n' + chalk.bold('📋 Template Info:'));
+    console.log(`   Framework: ${chalk.cyan(framework.charAt(0).toUpperCase() + framework.slice(1))}`);
+    console.log(`   Template: ${chalk.gray(TEMPLATE_REPO)}@${chalk.yellow(templateRef)}`);
+    console.log(`   API Routes: ${apiEnabled ? chalk.green('enabled') : chalk.red('disabled')}`);
     console.log('\n' + chalk.bold('📁 Project Structure:'));
     console.log(`   ${chalk.cyan(projectName)}/`);
     console.log(`   ├── ${chalk.gray('src/')}`);
@@ -396,7 +455,7 @@ function displaySummary(projectDir, projectName, packageManager, installed, apiE
     }
 }
 async function createProject(options) {
-    let { projectName, ref, noInstall, useApi, noCleanup, yes } = options;
+    let { projectName, framework, ref, noInstall, useApi, noCleanup, yes } = options;
     const isTTY = process.stdout.isTTY && !yes;
     // 1. Resolve inputs - Prompt for project name if not provided
     if (!projectName && isTTY) {
@@ -436,6 +495,23 @@ async function createProject(options) {
         console.error(chalk.red('Error: Invalid project name. Must be npm-safe (lowercase, kebab-case, no spaces)'));
         process.exit(1);
     }
+    // 2. Prompt for framework if not set via flags/env
+    if (framework === undefined && isTTY) {
+        const frameworkResponse = await prompts({
+            type: 'select',
+            name: 'framework',
+            message: 'Choose a framework:',
+            choices: [
+                { title: 'React', value: 'react' },
+                { title: 'Vue', value: 'vue' }
+            ],
+            initial: 0 // Default: React
+        });
+        framework = frameworkResponse.framework ?? 'react'; // Default to react if cancelled
+    }
+    else if (framework === undefined) {
+        framework = 'react'; // Default for non-interactive
+    }
     const projectDir = path.resolve(kebabProjectName);
     // Check if directory already exists
     try {
@@ -462,7 +538,7 @@ async function createProject(options) {
     catch {
         // Directory doesn't exist, which is what we want
     }
-    // 2. Prompt for API routes if not set via flags/env
+    // 3. Prompt for API routes if not set via flags/env
     if (useApi === undefined && isTTY) {
         const apiResponse = await prompts({
             type: 'confirm',
@@ -476,9 +552,9 @@ async function createProject(options) {
         useApi = true; // Default for non-interactive
     }
     try {
-        // 3. Download template
+        // 4. Download template
         const templateRef = ref || await getLatestTag();
-        await downloadTemplate(templateRef, projectDir);
+        await downloadTemplate(templateRef, projectDir, framework);
         // 4. Sanitize BOM
         await sanitizeBOM(projectDir);
         // 5. Cleanup dev files (unless --no-cleanup)
@@ -497,7 +573,7 @@ async function createProject(options) {
         }
         // 8. Display success summary
         const packageManager = detectPackageManager();
-        displaySummary(projectDir, kebabProjectName, packageManager, dependenciesInstalled, useApi ?? true, cleanupResult);
+        displaySummary(projectDir, kebabProjectName, framework, templateRef, packageManager, dependenciesInstalled, useApi ?? true, cleanupResult);
     }
     catch (error) {
         console.error(chalk.red('Error creating project:'), error instanceof Error ? error.message : 'Unknown error');
@@ -515,9 +591,10 @@ async function createProject(options) {
 const program = new Command();
 program
     .name('create-astro')
-    .description('Create a new Astro project with React and TypeScript')
+    .description('Create a new Astro project with React or Vue and TypeScript')
     .version('0.1.0')
     .argument('[project-name]', 'Name of the project')
+    .option('--framework <framework>', 'Framework to use (react|vue)', 'react')
     .option('--ref <ref>', 'Git reference (tag, branch, or commit) to use')
     .option('--no-install', 'Skip dependency installation')
     .option('--api', 'Include API routes')
@@ -525,6 +602,11 @@ program
     .option('--yes, -y', 'Auto accept defaults (non-interactive mode)')
     .option('--no-cleanup', 'Skip cleanup of development files (for debugging)')
     .action(async (projectName, cliOptions) => {
+    // Validate framework option
+    if (cliOptions.framework && !['react', 'vue'].includes(cliOptions.framework)) {
+        console.error(chalk.red('Error: Framework must be either "react" or "vue"'));
+        process.exit(1);
+    }
     // Handle conflicting API options
     if (cliOptions.api && cliOptions.noApi) {
         console.error(chalk.red('Error: Cannot use both --api and --no-api flags'));
