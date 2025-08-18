@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/PamanAleph/create-astro/compare/v1.2.0...v1.3.0) (2025-08-18)
+
+
+### Features
+
+* add Vue framework support and improve template handling ([fdc3ce6](https://github.com/PamanAleph/create-astro/commit/fdc3ce6824809073edc7e1e3c49f2c7a30d7309c))
+
 # [1.2.0](https://github.com/PamanAleph/create-astro/compare/v1.1.0...v1.2.0) (2025-08-18)
 
 
