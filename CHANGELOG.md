@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/PamanAleph/create-astro/compare/v1.0.0...v1.1.0) (2025-08-18)
+
+
+### Features
+
+* add npm package publishing support ([3e250a6](https://github.com/PamanAleph/create-astro/commit/3e250a6613388497d999c2594f7894a443dda31d))
+
 # 1.0.0 (2025-08-18)
 
 
