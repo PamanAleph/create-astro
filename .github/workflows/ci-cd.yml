@@ -1,13 +1,14 @@
-name: E2E Scaffold Test
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, main ]
 
 jobs:
-  e2e-test:
+  # Job untuk quality checks dan testing
+  quality-and-test:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
@@ -17,6 +18,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
       
     - name: Setup Node.js
       uses: actions/setup-node@v4
@@ -27,10 +30,49 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
+    # BOM Check - hanya di Ubuntu untuk efisiensi
+    - name: Check for BOM in files
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        echo "Checking for BOM (Byte Order Mark) in text files..."
+        
+        # Find all text files with specified extensions
+        files=$(git ls-files | grep -E "\.(js|ts|json|md|mjs|css|html|yml|yaml)$" || true)
+        
+        bom_files=()
+        
+        for file in $files; do
+          if [ -f "$file" ]; then
+            # Check if file starts with BOM (EF BB BF)
+            if head -c 3 "$file" | xxd -p | grep -q "efbbbf"; then
+              bom_files+=("$file")
+            fi
+          fi
+        done
+        
+        if [ ${#bom_files[@]} -gt 0 ]; then
+          echo "❌ BOM detected in the following files:"
+          for file in "${bom_files[@]}"; do
+            echo "  - $file"
+          done
+          echo ""
+          echo "To remove BOM from these files, you can use:"
+          echo "  sed -i '1s/^\xEF\xBB\xBF//' <filename>"
+          echo "  or use your editor to save the file as UTF-8 without BOM"
+          exit 1
+        else
+          echo "✅ No BOM detected in any files."
+        fi
+      
     - name: Build CLI
       run: npm run build
       
-    - name: Test CLI scaffolding (with install)
+    - name: Run tests
+      if: matrix.os == 'ubuntu-latest'
+      run: npm test
+      
+    # E2E Testing
+    - name: Test CLI scaffolding (basic)
       shell: bash
       run: |
         # Create test directory
@@ -125,3 +167,40 @@ jobs:
       shell: bash
       run: |
         rm -rf test-projects
+
+  # Job untuk release - hanya berjalan di push ke master dan setelah quality checks berhasil
+  release:
+    needs: quality-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      packages: write
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        registry-url: 'https://registry.npmjs.org'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build
+      run: npm run build
+      
+    - name: Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.USER_TOKEN }}
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: npx semantic-release
