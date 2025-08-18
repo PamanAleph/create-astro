@@ -1,7 +1,7 @@
 {
     "name": "@pamanaleph/create-astro",
     "version": "1.1.0",
-    "description": "Create a new Astro project with React and TypeScript template",
+    "description": "🚀 Create a new Astro project with React and TypeScript template. Interactive CLI with customizable options for API routes, cleanup, and more.",
     "type": "module",
     "main": "dist/index.js",
     "bin": {
@@ -25,7 +25,10 @@
         "template",
         "cli",
         "create",
-        "scaffold"
+        "scaffold",
+        "generator",
+        "boilerplate",
+        "starter"
     ],
     "author": "PamanAleph",
     "license": "MIT",
@@ -37,6 +40,70 @@
         "url": "https://github.com/PamanAleph/create-astro/issues"
     },
     "homepage": "https://github.com/PamanAleph/create-astro#readme",
+    "usage": {
+        "basic": "npx @pamanaleph/create-astro my-project",
+        "interactive": "npx @pamanaleph/create-astro",
+        "with_options": "npx @pamanaleph/create-astro my-project --api --yes"
+    },
+    "cli": {
+        "description": "Interactive CLI for creating Astro projects with React and TypeScript",
+        "usage": "npx @pamanaleph/create-astro [project-name] [options]",
+        "arguments": {
+            "project-name": "Name of the project directory (optional, will prompt if not provided)"
+        },
+        "options": {
+            "--api": "Include API routes in the project",
+            "--no-api": "Exclude API routes from the project",
+            "--yes, -y": "Skip all prompts and use default values",
+            "--no-install": "Skip dependency installation",
+            "--no-cleanup": "Skip cleanup of development files",
+            "--ref <branch>": "Use specific git branch/tag (default: main)",
+            "--help, -h": "Display help information",
+            "--version, -V": "Display version number"
+        },
+        "environment_variables": {
+            "CREATE_ASTRO_API": "Set to '1' to include API routes, '0' to exclude (overrides prompts)",
+            "CREATE_ASTRO_YES": "Set to '1' to skip all prompts and use defaults"
+        },
+        "examples": [
+            {
+                "command": "npx @pamanaleph/create-astro",
+                "description": "Interactive mode - prompts for project name and options"
+            },
+            {
+                "command": "npx @pamanaleph/create-astro my-awesome-app",
+                "description": "Create project with name, prompt for API routes"
+            },
+            {
+                "command": "npx @pamanaleph/create-astro my-app --api --yes",
+                "description": "Create project with API routes, skip all prompts"
+            },
+            {
+                "command": "npx @pamanaleph/create-astro my-app --no-api --no-cleanup",
+                "description": "Create project without API routes, keep development files"
+            },
+            {
+                "command": "npx @pamanaleph/create-astro my-app --ref develop",
+                "description": "Create project from develop branch"
+            },
+            {
+                "command": "CREATE_ASTRO_API=1 CREATE_ASTRO_YES=1 npx @pamanaleph/create-astro my-app",
+                "description": "Create project using environment variables"
+            }
+        ]
+    },
+    "features": [
+        "🎯 Interactive CLI with smart prompts",
+        "⚡ Fast project scaffolding from GitHub template",
+        "🔧 Configurable API routes (include/exclude)",
+        "🧹 Smart cleanup of development files",
+        "📦 Automatic dependency installation",
+        "🌿 Support for custom git branches/tags",
+        "🔒 NPM-safe project name validation",
+        "🎨 Beautiful CLI output with progress indicators",
+        "⚙️ Environment variable support",
+        "🚀 Zero-config setup for Astro + React + TypeScript"
+    ],
     "dependencies": {
         "commander": "^11.0.0",
         "chalk": "^5.3.0",

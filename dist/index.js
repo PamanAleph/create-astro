@@ -12,6 +12,139 @@ const TEMPLATE_REPO = 'PamanAleph/astro-react-typescript-template';
 const TEMPLATE_NPM_PACKAGE = 'astro-react-typescript';
 const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_ARCHIVE_BASE = 'https://github.com';
+async function cleanupDevFiles(projectDir, options) {
+    const spinner = ora('Cleaning up development files...').start();
+    try {
+        // Whitelist - files/folders to NEVER delete
+        const whitelist = [
+            '.gitignore',
+            'README.md',
+            '.env.example',
+            'eslint.config.js',
+            'eslint.config.mjs',
+            'eslint.config.ts',
+            'astro.config.mjs',
+            'astro.config.js',
+            'astro.config.ts',
+            'tsconfig.json',
+            'package.json',
+            'package-lock.json',
+            'yarn.lock',
+            'pnpm-lock.yaml',
+            'public',
+            'src'
+        ];
+        // Denylist - files/folders to delete
+        const denylist = [
+            // CI & Release
+            '.github',
+            '.husky',
+            '.releaserc.json',
+            '.releaserc.js',
+            '.releaserc.yml',
+            '.releaserc.yaml',
+            'CHANGELOG.md',
+            'CONTRIBUTING.md',
+            // Editor/Tooling Dev
+            '.editorconfig',
+            '.gitattributes',
+            '.prettierrc',
+            '.prettierrc.json',
+            '.prettierrc.js',
+            '.prettierrc.yml',
+            '.prettierrc.yaml',
+            '.prettierignore',
+            '.vscode',
+            '.npmignore',
+            // Documentation
+            'docs',
+            // Testing
+            'vitest.config.js',
+            'vitest.config.ts',
+            'vitest.config.mjs',
+            'jest.config.js',
+            'jest.config.ts',
+            'jest.config.json',
+            '__tests__',
+            'msw'
+        ];
+        let filesRemoved = 0;
+        let foldersRemoved = 0;
+        const removedItems = [];
+        // Get all items in project directory
+        const items = await fs.readdir(projectDir);
+        for (const item of items) {
+            const itemPath = path.join(projectDir, item);
+            const stat = await fs.lstat(itemPath);
+            // Handle API routes special case first
+            if (item === 'src') {
+                if (!options.keepApi) {
+                    // Remove src/pages/api if keepApi is false
+                    const apiPath = path.join(itemPath, 'pages', 'api');
+                    try {
+                        await fs.access(apiPath);
+                        await fs.rm(apiPath, { recursive: true, force: true });
+                        removedItems.push('src/pages/api/**');
+                        foldersRemoved++;
+                    }
+                    catch {
+                        // API folder doesn't exist, skip
+                    }
+                }
+                continue;
+            }
+            // Skip if in whitelist
+            if (whitelist.includes(item)) {
+                continue;
+            }
+            // Check if item should be removed
+            if (denylist.includes(item)) {
+                try {
+                    await fs.rm(itemPath, { recursive: true, force: true });
+                    removedItems.push(item);
+                    if (stat.isDirectory()) {
+                        foldersRemoved++;
+                    }
+                    else {
+                        filesRemoved++;
+                    }
+                }
+                catch (error) {
+                    // Ignore errors for files that don't exist or can't be deleted
+                    continue;
+                }
+            }
+            // Handle test files pattern matching
+            if (item.includes('.test.') || item.includes('.spec.') || item.endsWith('.test.js') ||
+                item.endsWith('.test.ts') || item.endsWith('.spec.js') || item.endsWith('.spec.ts')) {
+                try {
+                    await fs.rm(itemPath, { recursive: true, force: true });
+                    removedItems.push(item);
+                    filesRemoved++;
+                }
+                catch {
+                    continue;
+                }
+            }
+        }
+        const result = {
+            filesRemoved,
+            foldersRemoved,
+            removedItems
+        };
+        if (result.filesRemoved > 0 || result.foldersRemoved > 0) {
+            spinner.succeed(`Cleaned up ${result.filesRemoved} files and ${result.foldersRemoved} folders`);
+        }
+        else {
+            spinner.succeed('No development files to clean up');
+        }
+        return result;
+    }
+    catch (error) {
+        spinner.fail('Failed to cleanup development files');
+        throw error;
+    }
+}
 async function sanitizeBOM(projectDir) {
     const spinner = ora('Sanitizing files (removing BOM)...').start();
     try {
@@ -185,19 +318,62 @@ function toKebabCase(str) {
         .replace(/[\s_]+/g, '-')
         .toLowerCase();
 }
-function displaySummary(projectDir, projectName, packageManager, installed) {
+function validateProjectName(name) {
+    // npm-safe validation: lowercase, kebab-case, no spaces
+    const npmSafeRegex = /^[a-z0-9-]+$/;
+    return npmSafeRegex.test(name) && !name.startsWith('-') && !name.endsWith('-');
+}
+function resolveInputs(projectName, cliOptions) {
+    // Priority: CLI flags → Environment variables → defaults
+    const options = {
+        projectName,
+        ref: cliOptions.ref,
+        noInstall: !cliOptions.install, // Commander converts --no-install to install: false
+        noCleanup: !cliOptions.cleanup, // Commander converts --no-cleanup to cleanup: false
+        yes: cliOptions.yes || cliOptions.Y || false // Handle both --yes and -y
+    };
+    // Handle API routes option
+    if (cliOptions.api !== undefined) {
+        options.useApi = cliOptions.api;
+    }
+    else if (process.env.CREATE_ASTRO_API !== undefined) {
+        options.useApi = process.env.CREATE_ASTRO_API === '1';
+    }
+    // If not set via flags or env, will be prompted
+    // Handle yes/auto-accept option
+    if (process.env.CREATE_ASTRO_YES === '1') {
+        options.yes = true;
+    }
+    return options;
+}
+function displaySummary(projectDir, projectName, packageManager, installed, apiEnabled, cleanupResult) {
     console.log('\n' + chalk.green('✨ Project scaffolded successfully!'));
     console.log('\n' + chalk.bold('📁 Project Structure:'));
     console.log(`   ${chalk.cyan(projectName)}/`);
     console.log(`   ├── ${chalk.gray('src/')}`);
     console.log(`   │   ├── ${chalk.gray('components/')}`);
     console.log(`   │   ├── ${chalk.gray('pages/')}`);
+    if (apiEnabled) {
+        console.log(`   │   │   └── ${chalk.yellow('api/')} ${chalk.green('(enabled)')}`);
+    }
     console.log(`   │   ├── ${chalk.gray('layout/')}`);
     console.log(`   │   └── ${chalk.gray('styles/')}`);
     console.log(`   ├── ${chalk.gray('public/')}`);
     console.log(`   ├── ${chalk.yellow('package.json')}`);
     console.log(`   ├── ${chalk.yellow('astro.config.mjs')}`);
     console.log(`   └── ${chalk.yellow('tsconfig.json')}`);
+    // Show cleanup results if available
+    if (cleanupResult && (cleanupResult.filesRemoved > 0 || cleanupResult.foldersRemoved > 0)) {
+        console.log('\n' + chalk.bold('🧹 Cleanup Summary:'));
+        console.log(`   Removed ${cleanupResult.filesRemoved} files and ${cleanupResult.foldersRemoved} folders`);
+        if (cleanupResult.removedItems.length > 0) {
+            const displayItems = cleanupResult.removedItems.slice(0, 10);
+            console.log(`   ${chalk.gray('Items removed:')} ${displayItems.join(', ')}`);
+            if (cleanupResult.removedItems.length > 10) {
+                console.log(`   ${chalk.gray('... and')} ${cleanupResult.removedItems.length - 10} ${chalk.gray('more')}`);
+            }
+        }
+    }
     console.log('\n' + chalk.bold('🚀 Next Steps:'));
     console.log(`   ${chalk.cyan('cd')} ${projectName}`);
     if (!installed) {
@@ -212,18 +388,32 @@ function displaySummary(projectDir, projectName, packageManager, installed) {
     console.log(`   • ${chalk.magenta('Tailwind CSS v4')}`);
     console.log(`   • ${chalk.red('Zod')} validation`);
     console.log(`   • ${chalk.gray('ESLint + Prettier')}`);
-    console.log(`   • ${chalk.yellow('API Routes')} example`);
+    if (apiEnabled) {
+        console.log(`   • ${chalk.yellow('API Routes')} ${chalk.green('enabled')}`);
+    }
+    else {
+        console.log(`   • ${chalk.yellow('API Routes')} ${chalk.red('disabled')}`);
+    }
 }
 async function createProject(options) {
-    let { projectName, ref, noInstall } = options;
-    // Prompt for project name if not provided
-    if (!projectName) {
+    let { projectName, ref, noInstall, useApi, noCleanup, yes } = options;
+    const isTTY = process.stdout.isTTY && !yes;
+    // 1. Resolve inputs - Prompt for project name if not provided
+    if (!projectName && isTTY) {
         const response = await prompts({
             type: 'text',
             name: 'projectName',
-            message: 'What is your project name?',
-            initial: 'my-astro-project',
-            validate: (value) => value.length > 0 ? true : 'Project name is required'
+            message: 'Project name:',
+            initial: 'my-astro-app',
+            validate: (value) => {
+                if (value.length === 0)
+                    return 'Project name is required';
+                const kebabName = toKebabCase(value);
+                if (!validateProjectName(kebabName)) {
+                    return 'Project name must be npm-safe (lowercase, kebab-case, no spaces)';
+                }
+                return true;
+            }
         });
         if (!response.projectName) {
             console.log(chalk.red('Operation cancelled'));
@@ -231,40 +421,83 @@ async function createProject(options) {
         }
         projectName = response.projectName;
     }
-    // Ensure projectName is defined at this point
+    // Ensure projectName is defined
     if (!projectName) {
-        console.error(chalk.red('Error: Project name is required'));
+        if (isTTY) {
+            console.error(chalk.red('Error: Project name is required'));
+        }
+        else {
+            projectName = 'my-astro-app'; // Default for non-TTY
+        }
+    }
+    // Convert to kebab-case and validate
+    const kebabProjectName = toKebabCase(projectName);
+    if (!validateProjectName(kebabProjectName)) {
+        console.error(chalk.red('Error: Invalid project name. Must be npm-safe (lowercase, kebab-case, no spaces)'));
         process.exit(1);
     }
-    // Convert to kebab-case
-    const kebabProjectName = toKebabCase(projectName);
     const projectDir = path.resolve(kebabProjectName);
     // Check if directory already exists
     try {
         await fs.access(projectDir);
-        console.error(chalk.red(`Error: Directory ${kebabProjectName} already exists`));
-        process.exit(1);
+        if (isTTY) {
+            const overwriteResponse = await prompts({
+                type: 'confirm',
+                name: 'overwrite',
+                message: `Directory ${kebabProjectName} already exists. Overwrite?`,
+                initial: false
+            });
+            if (!overwriteResponse.overwrite) {
+                console.log(chalk.red('Operation cancelled'));
+                process.exit(1);
+            }
+            // Remove existing directory
+            await fs.rm(projectDir, { recursive: true, force: true });
+        }
+        else {
+            console.error(chalk.red(`Error: Directory ${kebabProjectName} already exists`));
+            process.exit(1);
+        }
     }
     catch {
         // Directory doesn't exist, which is what we want
     }
+    // 2. Prompt for API routes if not set via flags/env
+    if (useApi === undefined && isTTY) {
+        const apiResponse = await prompts({
+            type: 'confirm',
+            name: 'useApi',
+            message: 'Use API routes?',
+            initial: true // Default: Yes
+        });
+        useApi = apiResponse.useApi ?? true; // Default to true if cancelled
+    }
+    else if (useApi === undefined) {
+        useApi = true; // Default for non-interactive
+    }
     try {
-        // Get template reference (tag/branch/commit)
+        // 3. Download template
         const templateRef = ref || await getLatestTag();
-        // Download and extract template
         await downloadTemplate(templateRef, projectDir);
-        // Update package.json with project name
+        // 4. Sanitize BOM
+        await sanitizeBOM(projectDir);
+        // 5. Cleanup dev files (unless --no-cleanup)
+        let cleanupResult;
+        if (!noCleanup) {
+            cleanupResult = await cleanupDevFiles(projectDir, { keepApi: useApi ?? true });
+        }
+        // 6. Update package.json
         await updatePackageJson(projectDir, kebabProjectName);
-        // Install dependencies if not skipped
+        // 7. Install dependencies
         let dependenciesInstalled = false;
         if (!noInstall) {
             const packageManager = detectPackageManager();
             await installDependencies(projectDir, packageManager);
             dependenciesInstalled = true;
         }
-        // Display success summary
+        // 8. Display success summary
         const packageManager = detectPackageManager();
-        displaySummary(projectDir, kebabProjectName, packageManager, dependenciesInstalled);
+        displaySummary(projectDir, kebabProjectName, packageManager, dependenciesInstalled, useApi ?? true, cleanupResult);
     }
     catch (error) {
         console.error(chalk.red('Error creating project:'), error instanceof Error ? error.message : 'Unknown error');
@@ -287,12 +520,23 @@ program
     .argument('[project-name]', 'Name of the project')
     .option('--ref <ref>', 'Git reference (tag, branch, or commit) to use')
     .option('--no-install', 'Skip dependency installation')
-    .action(async (projectName, options) => {
-    await createProject({
-        projectName,
-        ref: options.ref,
-        noInstall: options.noInstall
-    });
+    .option('--api', 'Include API routes')
+    .option('--no-api', 'Exclude API routes')
+    .option('--yes, -y', 'Auto accept defaults (non-interactive mode)')
+    .option('--no-cleanup', 'Skip cleanup of development files (for debugging)')
+    .action(async (projectName, cliOptions) => {
+    // Handle conflicting API options
+    if (cliOptions.api && cliOptions.noApi) {
+        console.error(chalk.red('Error: Cannot use both --api and --no-api flags'));
+        process.exit(1);
+    }
+    // Convert --no-api to api: false
+    if (cliOptions.noApi) {
+        cliOptions.api = false;
+    }
+    // Resolve all inputs with priority: flags → env → defaults
+    const options = resolveInputs(projectName, cliOptions);
+    await createProject(options);
 });
 program.parse();
 //# sourceMappingURL=index.js.map
