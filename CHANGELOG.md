@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/PamanAleph/create-astro/compare/v1.3.0...v1.4.0) (2025-08-18)
+
+
+### Features
+
+* **cli:** add package manager selection to astro project creation ([22fbbed](https://github.com/PamanAleph/create-astro/commit/22fbbeda7d3336093613601c995af791f1f57c42))
+
 # [1.3.0](https://github.com/PamanAleph/create-astro/compare/v1.2.0...v1.3.0) (2025-08-18)
 
 
