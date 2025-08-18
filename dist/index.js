@@ -9,8 +9,51 @@ import fs from 'fs/promises';
 import path from 'path';
 import { execSync } from 'child_process';
 const TEMPLATE_REPO = 'PamanAleph/astro-react-typescript-template';
+const TEMPLATE_NPM_PACKAGE = 'astro-react-typescript';
 const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_ARCHIVE_BASE = 'https://github.com';
+async function sanitizeBOM(projectDir) {
+    const spinner = ora('Sanitizing files (removing BOM)...').start();
+    try {
+        const filesToSanitize = [
+            'package.json',
+            'tsconfig.json',
+            '.releaserc.json',
+            'astro.config.mjs'
+        ];
+        let sanitizedCount = 0;
+        for (const fileName of filesToSanitize) {
+            const filePath = path.join(projectDir, fileName);
+            try {
+                // Check if file exists
+                await fs.access(filePath);
+                // Read file as buffer to check for BOM
+                const buffer = await fs.readFile(filePath);
+                // Check if file starts with BOM (EF BB BF)
+                if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+                    // Remove BOM and write back
+                    const content = buffer.slice(3).toString('utf8');
+                    await fs.writeFile(filePath, content, { encoding: 'utf8' });
+                    sanitizedCount++;
+                }
+            }
+            catch (error) {
+                // File doesn't exist or can't be read, skip silently
+                continue;
+            }
+        }
+        if (sanitizedCount > 0) {
+            spinner.succeed(`Sanitized ${sanitizedCount} file(s) (removed BOM)`);
+        }
+        else {
+            spinner.succeed('No BOM found in files');
+        }
+    }
+    catch (error) {
+        spinner.fail('Failed to sanitize files');
+        throw error;
+    }
+}
 async function getLatestTag() {
     const spinner = ora('Fetching latest template version...').start();
     try {
@@ -52,6 +95,8 @@ async function downloadTemplate(ref, targetDir) {
             extractStream.on('error', reject);
         });
         spinner.succeed(`Template downloaded to ${chalk.green(targetDir)}`);
+        // Sanitize BOM from downloaded files
+        await sanitizeBOM(targetDir);
     }
     catch (error) {
         spinner.fail('Failed to download template');
@@ -77,16 +122,28 @@ async function updatePackageJson(projectDir, projectName) {
     }
 }
 function detectPackageManager() {
+    // In CI environments, prefer npm for better compatibility
+    const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+    if (isCI) {
+        return 'npm';
+    }
+    // Check for pnpm first (most reliable in local development)
     try {
         execSync('pnpm --version', { stdio: 'ignore' });
+        // Test if pnpm can actually run install command
+        execSync('pnpm --help', { stdio: 'ignore' });
         return 'pnpm';
     }
     catch { }
+    // Check for yarn with more robust detection
     try {
         execSync('yarn --version', { stdio: 'ignore' });
+        // Test if yarn can actually run install command in a safe way
+        execSync('yarn --help', { stdio: 'ignore' });
         return 'yarn';
     }
     catch { }
+    // Fallback to npm (always available in Node.js environments)
     return 'npm';
 }
 async function installDependencies(projectDir, packageManager) {
@@ -100,6 +157,24 @@ async function installDependencies(projectDir, packageManager) {
         spinner.succeed('Dependencies installed successfully');
     }
     catch (error) {
+        // If yarn fails, try with npm as fallback
+        if (packageManager === 'yarn') {
+            spinner.text = 'Yarn failed, trying with npm...';
+            try {
+                execSync('npm install', {
+                    cwd: projectDir,
+                    stdio: 'ignore',
+                });
+                spinner.succeed('Dependencies installed successfully with npm (yarn fallback)');
+                return;
+            }
+            catch (npmError) {
+                spinner.fail('Failed to install dependencies with both yarn and npm');
+                console.error(chalk.red('Yarn error:'), error instanceof Error ? error.message : 'Unknown error');
+                console.error(chalk.red('NPM error:'), npmError instanceof Error ? npmError.message : 'Unknown error');
+                throw npmError;
+            }
+        }
         spinner.fail('Failed to install dependencies');
         throw error;
     }

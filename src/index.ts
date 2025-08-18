@@ -11,6 +11,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const TEMPLATE_REPO = 'PamanAleph/astro-react-typescript-template';
+const TEMPLATE_NPM_PACKAGE = 'astro-react-typescript';
 const GITHUB_API_BASE = 'https://api.github.com';
 const GITHUB_ARCHIVE_BASE = 'https://github.com';
 
@@ -18,6 +19,7 @@ interface TemplateOptions {
   projectName?: string;
   ref?: string;
   noInstall?: boolean;
+  useNpm?: boolean;
 }
 
 interface GitHubRelease {
@@ -157,16 +159,29 @@ async function updatePackageJson(projectDir: string, projectName: string): Promi
 }
 
 function detectPackageManager(): string {
+  // In CI environments, prefer npm for better compatibility
+  const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  if (isCI) {
+    return 'npm';
+  }
+  
+  // Check for pnpm first (most reliable in local development)
   try {
     execSync('pnpm --version', { stdio: 'ignore' });
+    // Test if pnpm can actually run install command
+    execSync('pnpm --help', { stdio: 'ignore' });
     return 'pnpm';
   } catch {}
   
+  // Check for yarn with more robust detection
   try {
     execSync('yarn --version', { stdio: 'ignore' });
+    // Test if yarn can actually run install command in a safe way
+    execSync('yarn --help', { stdio: 'ignore' });
     return 'yarn';
   } catch {}
   
+  // Fallback to npm (always available in Node.js environments)
   return 'npm';
 }
 
@@ -183,6 +198,24 @@ async function installDependencies(projectDir: string, packageManager: string): 
     
     spinner.succeed('Dependencies installed successfully');
   } catch (error) {
+    // If yarn fails, try with npm as fallback
+    if (packageManager === 'yarn') {
+      spinner.text = 'Yarn failed, trying with npm...';
+      try {
+        execSync('npm install', {
+          cwd: projectDir,
+          stdio: 'ignore',
+        });
+        spinner.succeed('Dependencies installed successfully with npm (yarn fallback)');
+        return;
+      } catch (npmError) {
+        spinner.fail('Failed to install dependencies with both yarn and npm');
+        console.error(chalk.red('Yarn error:'), error instanceof Error ? error.message : 'Unknown error');
+        console.error(chalk.red('NPM error:'), npmError instanceof Error ? npmError.message : 'Unknown error');
+        throw npmError;
+      }
+    }
+    
     spinner.fail('Failed to install dependencies');
     throw error;
   }

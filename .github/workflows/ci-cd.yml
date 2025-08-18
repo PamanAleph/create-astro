@@ -152,6 +152,25 @@ jobs:
         
         cd my-test-app-build
         
+        # Debug: Check which package manager was detected
+        echo "📦 Checking package manager availability..."
+        if command -v pnpm >/dev/null 2>&1; then
+          echo "✅ pnpm available: $(pnpm --version)"
+        else
+          echo "❌ pnpm not available"
+        fi
+        
+        if command -v yarn >/dev/null 2>&1; then
+          echo "✅ yarn available: $(yarn --version)"
+        else
+          echo "❌ yarn not available"
+        fi
+        
+        echo "✅ npm available: $(npm --version)"
+        
+        # Debug: Check package.json content
+        echo "📄 Package.json name: $(grep '"name"' package.json)"
+        
         # Try to build the project
         npm run build
         
