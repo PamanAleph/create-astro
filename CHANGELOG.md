@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/PamanAleph/create-astro/compare/v1.4.0...v1.5.0) (2025-08-19)
+
+
+### Features
+
+* remove extra blank line in index.ts ([449fe5b](https://github.com/PamanAleph/create-astro/commit/449fe5b460c81dba3730813fd6fb9dfe6b2e6f6c))
+
 # [1.4.0](https://github.com/PamanAleph/create-astro/compare/v1.3.0...v1.4.0) (2025-08-18)
 
 

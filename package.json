@@ -1,6 +1,6 @@
 {
     "name": "@pamanaleph/create-astro",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "description": "🚀 Create a new Astro project with React or Vue and TypeScript template. Interactive CLI with customizable options for framework selection, API routes, cleanup, and more.",
     "type": "module",
     "main": "dist/index.js",
